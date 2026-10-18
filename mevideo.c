@@ -21,7 +21,7 @@ static const char *colours[] = {"White", "Black", "Red", "Green", "Blue", "Cyan"
     "Light blue", "Light cyan", "Light yellow", "Light magenta"};
 
 enum { ROOTBOX, TITLE, CURRENT, RESLABEL, RESOLUTION, DEPTHLABEL, DEPTH,
-    BGLABEL, BACKGROUND, COLOUR, PATTERN, WALLPAPER, FILENAME, NOTE, SAVE, CANCEL, COUNT };
+    BGLABEL, BACKGROUND, COLOUR, PATTERN, WALLPAPER, FILENAME, PREVIEW, NOTE, SAVE, CANCEL, COUNT };
 
 /* Main's normal configuration serializer includes all the owner's icons/settings. */
 extern const char *me_desktop_file(void);
@@ -37,6 +37,8 @@ static void widget(OBJECT *o, short i, short type, short x, short y,
     o[i].ob_spec.free_string = (char *)text;
     o[i].ob_x=x*8; o[i].ob_y=y*16; o[i].ob_width=w*8; o[i].ob_height=h*16;
 }
+
+#include "mevideo_preview.h"
 
 static int save_video(short mode, short depth, short picture, const char *bitmap,
                       short colour, short pattern)
@@ -73,9 +75,9 @@ static int save_video(short mode, short depth, short picture, const char *bitmap
             return 0;
         }
     }
-    sprintf(driver, "01r a2560me.sys%s %d\n", mode&1 ? " half" : "", mode>=2 ? 1024 : 960);
+    sprintf(driver, "01r a2560me.sys%s %d%s\n", mode&1 ? " half" : "", mode>=2 ? 1024 : 960, depth==32 ? " rgb24" : "");
     ok=me_replace(ME_BOOT, files[0].temp, "exec u:/d/mint/fvdi/fvdi.prg", ME_OFF,
-        depth == 16 ? "exec u:/d/mint/fvdi/fvdi.prg\n" : ME_OFF "\n");
+        depth != 1 ? "exec u:/d/mint/fvdi/fvdi.prg\n" : ME_OFF "\n");
     if (ok) ok=me_replace(ME_FVDI, files[1].temp, "01r a2560me.sys", NULL, driver);
     if (ok) {
         f=fopen(files[2].temp,"wb");
@@ -107,7 +109,8 @@ short me_voptions(void)
     OBJECT o[COUNT];
     char current[64], resolution[40], depthtext[40], bgtext[40], colourtext[40], patterntext[40];
     char bitmap[260]="", shown[52], header[64];
-    short mode=0, depth=xd_nplanes == 16 ? 16 : 1, picture=0, button, choice;
+    struct me_sample sample;
+    short mode=0, depth=xd_nplanes == 32 ? 32 : xd_nplanes == 16 ? 16 : 1, picture=0, button, choice;
     short colour=options.dsk_colour, pattern=options.dsk_pattern;
     _WORD x,y,w,h;
     FILE *f=fopen(ME_PREF,"rb");
@@ -118,7 +121,7 @@ short me_voptions(void)
     colour_available=reservation==0x3f800000L && me_exists(ME_FVDI);
     if (f) {
         if (fgets(header,sizeof(header),f) && !strcmp(header,"A2560Me video 1\n") &&
-            fscanf(f,"%d %d %d\n",&m,&d,&b)==3 && m>=0 && m<4 && (d==1 || d==16) && (b==0 || b==1)) {
+            fscanf(f,"%d %d %d\n",&m,&d,&b)==3 && m>=0 && m<4 && (d==1 || d==16 || d==32) && (b==0 || b==1)) {
             mode=m; depth=d; picture=b;
             if (fgets(bitmap,sizeof(bitmap),f)) bitmap[strcspn(bitmap,"\r\n")]=0;
         }
@@ -129,28 +132,33 @@ short me_voptions(void)
     if (!colour_available) depth=1;
     if (depth==1) mode=0;
     sprintf(current,"Running: %dx%d, %d-bit",xd_screen.g_w,xd_screen.g_h,xd_nplanes);
-    widget(o,0,G_BOX,0,0,58,24,NULL,0);
+    memset(&sample,0,sizeof(sample)); sample.width=mode>=2 ? 160 : 192; sample.height=mode>=2 ? 128 : 144;
+    me_load_sample(&sample,bitmap,depth);
+    widget(o,0,G_BOX,0,0,58,28,NULL,0);
     o[0].ob_next=-1; o[0].ob_head=1; o[0].ob_tail=COUNT-1; o[0].ob_spec.index=0x00021100L;
     widget(o,TITLE,G_STRING,15,1,35,1,"A2560Me Video Options",0);
-    widget(o,CURRENT,G_STRING,3,3,52,1,current,0);
-    widget(o,RESLABEL,G_STRING,3,5,14,1,"Resolution",0);
-    widget(o,RESOLUTION,G_BUTTON,20,5,34,1,resolution,OF_SELECTABLE|OF_EXIT);
-    widget(o,DEPTHLABEL,G_STRING,3,7,14,1,"Colour depth",0);
-    widget(o,DEPTH,G_BUTTON,20,7,34,1,depthtext,OF_SELECTABLE|OF_EXIT);
-    widget(o,BGLABEL,G_STRING,3,9,14,1,"Background",0);
-    widget(o,BACKGROUND,G_BUTTON,20,9,34,1,bgtext,OF_SELECTABLE|OF_EXIT);
-    widget(o,COLOUR,G_BUTTON,3,11,25,1,colourtext,OF_SELECTABLE|OF_EXIT);
-    widget(o,PATTERN,G_BUTTON,30,11,24,1,patterntext,OF_SELECTABLE|OF_EXIT);
-    widget(o,WALLPAPER,G_BUTTON,3,14,51,1,"Choose wallpaper BMP...",OF_SELECTABLE|OF_EXIT);
-    widget(o,FILENAME,G_STRING,3,16,52,1,shown,0);
-    widget(o,NOTE,G_STRING,3,19,52,1,"Changes take effect after restart.",0);
-    widget(o,SAVE,G_BUTTON,6,21,20,1,"Apply...",OF_SELECTABLE|OF_EXIT|OF_DEFAULT);
-    widget(o,CANCEL,G_BUTTON,32,21,20,1,"Cancel",OF_SELECTABLE|OF_EXIT|OF_LASTOB);
+    widget(o,CURRENT,G_STRING,3,2,52,1,current,0);
+    widget(o,RESLABEL,G_STRING,3,4,14,1,"Resolution",0);
+    widget(o,RESOLUTION,G_BUTTON,20,4,34,1,resolution,OF_SELECTABLE|OF_EXIT);
+    widget(o,DEPTHLABEL,G_STRING,3,6,14,1,"Colour depth",0);
+    widget(o,DEPTH,G_BUTTON,20,6,34,1,depthtext,OF_SELECTABLE|OF_EXIT);
+    widget(o,BGLABEL,G_STRING,3,8,14,1,"Background",0);
+    widget(o,BACKGROUND,G_BUTTON,20,8,34,1,bgtext,OF_SELECTABLE|OF_EXIT);
+    widget(o,COLOUR,G_BUTTON,3,10,25,1,colourtext,OF_SELECTABLE|OF_EXIT);
+    widget(o,PATTERN,G_BUTTON,30,10,24,1,patterntext,OF_SELECTABLE|OF_EXIT);
+    widget(o,WALLPAPER,G_BUTTON,3,22,51,1,"Choose wallpaper...",OF_SELECTABLE|OF_EXIT);
+    widget(o,FILENAME,G_STRING,3,23,52,1,shown,0);
+    widget(o,PREVIEW,G_BOX,17,12,24,9,NULL,0);
+    me_sample_object(o,PREVIEW,&sample);
+    widget(o,NOTE,G_STRING,3,24,52,1,"Changes take effect after restart.",0);
+    widget(o,SAVE,G_BUTTON,6,26,20,1,"Apply...",OF_SELECTABLE|OF_EXIT|OF_DEFAULT);
+    widget(o,CANCEL,G_BUTTON,32,26,20,1,"Cancel",OF_SELECTABLE|OF_EXIT|OF_LASTOB);
+    o[FILENAME].ob_y+=4;
     form_center(o,&x,&y,&w,&h);
     form_dial(FMD_START,0,0,0,0,x,y,w,h);
     for (;;) {
         sprintf(resolution,"%d x %d  (click to cycle)",widths[mode],heights[mode]);
-        strcpy(depthtext,depth==16 ? "16-bit / 65536 colours" : "1-bit / monochrome");
+        strcpy(depthtext,depth==32 ? "24-bit RGB / 16M colours" : depth==16 ? "16-bit / 65536 colours" : "1-bit / monochrome");
         strcpy(bgtext,picture ? "XaAES wallpaper" : "Colour and pattern");
         sprintf(colourtext,"Colour: %s",colours[colour&15]);
         sprintf(patterntext,"Pattern: %d",pattern);
@@ -159,23 +167,21 @@ short me_voptions(void)
         o[RESOLUTION].ob_state=depth==1 ? OS_DISABLED : 0;
         o[DEPTH].ob_state=colour_available ? 0 : OS_DISABLED;
         o[COLOUR].ob_state=o[PATTERN].ob_state=picture ? OS_DISABLED : 0;
+        sample.colour=colour; sample.pattern=pattern; sample.picture=picture;
         objc_draw(o,0,MAX_DEPTH,x,y,w,h);
         button=form_do(o,0)&0x7fff;
+        if(button<0 || button>=COUNT) continue;
         o[button].ob_state &= ~OS_SELECTED;
         if (button==CANCEL) break;
-        if (button==RESOLUTION && depth==16) mode=(mode+1)%4;
-        if (button==DEPTH && colour_available) { depth=depth==16 ? 1 : 16; if(depth==1) mode=0; colour &= depth==1 ? 1 : 15; }
+        if (button==RESOLUTION && depth!=1) { mode=(mode+1)%4; sample.width=mode>=2 ? 160 : 192; sample.height=mode>=2 ? 128 : 144; me_load_sample(&sample,bitmap,depth); }
+        if (button==DEPTH && colour_available) { depth=depth==1 ? 16 : depth==16 ? 32 : 1; if(depth==1) mode=0; colour &= depth==1 ? 1 : 15; sample.width=mode>=2 ? 160 : 192; sample.height=mode>=2 ? 128 : 144; me_load_sample(&sample,bitmap,depth); }
         if (button==BACKGROUND) picture=!picture;
         if (button==COLOUR) colour=(colour+1)%(depth==1 ? 2 : 16);
         if (button==PATTERN) pattern=pattern%37+1;
         if (button==WALLPAPER) {
-            char path[260]="D:\\WALLPAPR\\*.BMP", name[256]="";
-            _WORD selected=0;
-            if (fsel_exinput(path,name,&selected,"Choose wallpaper (uncompressed BMP)") && selected) {
-                char *p=strrchr(path,'\\');
-                if (p && (size_t)(p-path+1)+strlen(name)<sizeof(bitmap)) {
-                    strcpy(p+1,name); strcpy(bitmap,path); picture=1;
-                }
+            if(me_choose_wallpaper(bitmap,depth,mode)) {
+                picture=1; me_load_sample(&sample,bitmap,depth);
+                if(!sample.pixels) form_alert(1,"[1][Wallpaper preview is unavailable.|Existing settings are unchanged.][OK]");
             }
         }
         if (button==SAVE) {
@@ -185,10 +191,12 @@ short me_voptions(void)
             if (save_video(mode,depth,picture,bitmap,colour,pattern)) {
                 form_dial(FMD_FINISH,0,0,0,0,x,y,w,h);
                 if (choice==1) { Shutdown(1L); form_alert(1,"[1][Restart was not completed.|Saved settings will apply next boot.][OK]"); }
+                free(sample.pixels);
                 return 0;
             }
         }
     }
     form_dial(FMD_FINISH,0,0,0,0,x,y,w,h);
+    free(sample.pixels);
     return 0;
 }

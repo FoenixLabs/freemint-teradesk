@@ -5,6 +5,7 @@ import subprocess,tempfile,struct
 root=Path(__file__).resolve().parents[1]
 source=r'''
 #include <assert.h>
+#include <dirent.h>
 #include "mevideo_io.h"
 static void put(const char *p,const char *v) { FILE *f=fopen(p,"wb"); assert(f);fputs(v,f);assert(!fclose(f)); }
 static void expect(const char *p,const char *v) { char b[256]={0};FILE *f=fopen(p,"rb");assert(f);fread(b,1,255,f);fclose(f);assert(!strcmp(b,v)); }
@@ -29,8 +30,32 @@ int main(void) {
  assert(pixels[0]==0xff && pixels[1]==0);
  assert(me_bmp("top.bmp","top.mfd",16,2,16));expect("unused","");
  assert(!me_bmp("truncated.bmp","bad.mfd",16,2,16));assert(!me_exists("bad.mfd"));
- assert(!me_bmp("rgb.bmp","bad.mfd",16,2,32));
- puts("PASS: video config preservation, duplicate rejection, multi-file rollback, wallpaper removal, RGB565/mono BMP conversion and malformed input");
+ assert(me_bmp("rgb.bmp","rgb32.mfd",16,2,32));
+ f=fopen("rgb32.mfd","rb");assert(fread(pixels,1,64,f)==64);fclose(f);
+ assert(pixels[0]==0 && pixels[1]==255 && pixels[2]==0 && pixels[3]==0);
+ assert(pixels[32]==0 && pixels[33]==0 && pixels[34]==255 && pixels[35]==0);
+ { unsigned char *a,*b; unsigned n;
+   a=me_thumbnail("rgb.bmp","cache",16,2,16);assert(a);
+   b=me_thumbnail("rgb.bmp","cache",16,2,16);assert(b && !memcmp(a,b,64));free(b);
+   /* Corrupt cache payloads must be regenerated, not painted into the GUI. */
+   { DIR *dir=opendir(".");struct dirent *e;assert(dir);
+     while((e=readdir(dir))!=NULL) if(!strncmp(e->d_name,"cache\\",6) && strstr(e->d_name,".BIN")) put(e->d_name,"bad");
+     closedir(dir);
+   }
+   b=me_thumbnail("rgb.bmp","cache",16,2,16);assert(b && !memcmp(a,b,64));free(b);
+   /* Read-only/missing cache still previews. */
+   b=me_thumbnail("rgb.bmp",NULL,16,2,16);assert(b && !memcmp(a,b,64));free(b);
+   b=me_thumbnail("rgb.bmp","missing/cache",16,2,32);assert(b && b[1]==255);free(b);
+   f=fopen("rgb.bmp","r+b");assert(f);assert(!fseek(f,62,SEEK_SET));fputc(255,f);fputc(0,f);fputc(0,f);assert(!fseek(f,0,SEEK_END));fputc(0,f);fclose(f);
+   b=me_thumbnail("rgb.bmp","cache",16,2,16);assert(b && b[0]==0 && b[1]==31);free(b);free(a);
+   for(n=0;n<3;n++) assert(!me_thumbnail("truncated.bmp","cache",16,2,n==0?1:n==1?16:32));
+   assert(!me_thumbnail("rgb.bmp",NULL,17,2,16));
+ }
+ assert(me_bmp("alpha.bmp","alpha.mfd",16,1,32));
+ f=fopen("alpha.mfd","rb");assert(fread(pixels,1,64,f)==64);fclose(f);
+ assert(pixels[0]==0 && pixels[1]==0x12 && pixels[2]==0x34 && pixels[3]==0x56);
+ assert(!me_bmp("rgb.bmp","bad.mfd",16,2,24));
+ puts("PASS: video config preservation, duplicate rejection, multi-file rollback, wallpaper removal, RGB565/RGB888/mono BMP conversion and thumbnail cache and malformed input");
 }
 '''.replace('expect("unused","");','')
 def bmp(w,h,rows):
@@ -42,6 +67,7 @@ with tempfile.TemporaryDirectory() as tmp:
  (d/'rgb.bmp').write_bytes(bmp(2,2,[b'\xff\0\0\xff\xff\xff',b'\0\0\xff\0\xff\0']))
  (d/'top.bmp').write_bytes(bmp(2,-2,[b'\0\0\xff\0\xff\0',b'\xff\0\0\xff\xff\xff']))
  (d/'bw.bmp').write_bytes(bmp(2,1,[b'\0\0\0\xff\xff\xff']))
+ (d/'alpha.bmp').write_bytes(b'BM'+struct.pack('<IHHI',58,0,0,54)+struct.pack('<IiiHHIIiiII',40,1,1,1,32,0,4,0,0,0,0)+bytes([0x56,0x34,0x12,0xab]))
  (d/'truncated.bmp').write_bytes((d/'rgb.bmp').read_bytes()[:-1])
  subprocess.run(['cc','-std=c99','-Wall','-Wextra','-Werror','-fsanitize=address,undefined','-I'+str(root),str(d/'test.c'),'-o',str(d/'test')],check=True)
  subprocess.run([str(d/'test')],cwd=d,check=True)
