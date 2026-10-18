@@ -38,6 +38,21 @@ static void widget(OBJECT *o, short i, short type, short x, short y,
     o[i].ob_x=x*8; o[i].ob_y=y*16; o[i].ob_width=w*8; o[i].ob_height=h*16;
 }
 
+/* Centre the decorated window, not just its object tree. In a 480-line
+ * desktop XaAES otherwise clamps the title bar below the menu after drawing,
+ * shifting the controls between the initial draw and the first form_do. */
+static void me_center(OBJECT *o,_WORD *x,_WORD *y,_WORD *w,_WORD *h)
+{
+    _WORD bx,by,bw,bh,dx,dy,dw,dh,nx,ny;
+    form_center(o,x,y,w,h);
+    if(wind_get(0,WF_WORKXYWH,&dx,&dy,&dw,&dh) &&
+       wind_calc(WC_BORDER,NAME|MOVER,0,0,*w,*h,&bx,&by,&bw,&bh)) {
+        nx=dx+(dw-bw)/2-bx; ny=dy+(dh-bh)/2-by;
+        o[0].ob_x+=nx-*x; o[0].ob_y+=ny-*y;
+        *x=nx; *y=ny;
+    }
+}
+
 #include "mevideo_preview.h"
 
 static int save_video(short mode, short depth, short picture, const char *bitmap,
@@ -155,7 +170,7 @@ short me_voptions(void)
     widget(o,CANCEL,G_BUTTON,32,25,20,1,"Cancel",OF_SELECTABLE|OF_EXIT|OF_LASTOB);
     o[PREVIEW].ob_y+=4;
     o[FILENAME].ob_y+=4;
-    form_center(o,&x,&y,&w,&h);
+    me_center(o,&x,&y,&w,&h);
     form_dial(FMD_START,0,0,0,0,x,y,w,h);
     for (;;) {
         sprintf(resolution,"%d x %d  (click to cycle)",widths[mode],heights[mode]);

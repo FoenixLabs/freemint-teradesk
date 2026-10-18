@@ -101,7 +101,7 @@ static int me_choose_wallpaper(char *bitmap,short depth,short mode)
     widget(o,CUSE,G_BUTTON,3,25,25,1,"Use wallpaper",OF_SELECTABLE|OF_EXIT|OF_DEFAULT);
     widget(o,CCANCEL,G_BUTTON,32,25,22,1,"Cancel",OF_SELECTABLE|OF_EXIT);
     widget(o,CSTATUS,G_STRING,3,21,52,1,status,OF_LASTOB); o[CSTATUS].ob_next=0;
-    form_center(o,&x,&y,&w,&h); form_dial(FMD_START,0,0,0,0,x,y,w,h);
+    me_center(o,&x,&y,&w,&h); form_dial(FMD_START,0,0,0,0,x,y,w,h);
     for(;;) {
         if(reload) {
             count=me_wallpapers(directory,offset,paths,&more); selected=-1;
