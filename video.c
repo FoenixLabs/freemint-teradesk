@@ -481,35 +481,9 @@ short voptions(void)
 
 	get_set_video(0);
 
-	/* Foenix has no Atari shifter. Use actual VDI dimensions and only
-	 * list modes implemented by its RGB565 driver at the current timing.
-	 * Switching is selected in FVDI.SYS before AES starts, not Setscreen.
-	 */
+	/* A2560Me modes and AES backgrounds are configured before AES starts. */
 	if (vdo == 0x0000f258L)
-	{
-		char message[256];
-		_WORD height = xd_screen.g_h;
-		long reservation = 0;
-		find_cookie(0x4656524dL, &reservation); /* FVRM */
-		if (xd_screen.g_w == 640 && xd_nplanes == 16)
-			height *= 2;
-		if (reservation == 0x3f800000L &&
-			(height == 960 || height == 1024))
-		{
-			sprintf(message,
-				"[1][Current: %dx%d, %d bpp|Supported RGB565 modes:|1280x%d / 640x%d (65536 colours)|Monochrome: 1280x%d|Select in fVDI config before boot.][OK]",
-				xd_screen.g_w, xd_screen.g_h, xd_nplanes,
-				height, height / 2, height);
-		}
-		else
-		{
-			sprintf(message,
-				"[1][Current: %dx%d, %d bpp|Monochrome mode only.|DDR firmware and fVDI are required|for RGB565 modes.][OK]",
-				xd_screen.g_w, xd_screen.g_h, xd_nplanes);
-		}
-		form_alert(1, message);
-		return 0;
-	}
+		return me_voptions();
 
 	/* Set radiobutton for current resolution selected */
 

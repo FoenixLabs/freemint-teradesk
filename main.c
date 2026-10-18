@@ -1038,6 +1038,16 @@ static _WORD load_options(int io)
 /*
  * Save configuration into default config file 
  */
+const char *me_desktop_file(void)
+{
+    return definfname;
+}
+
+int me_desktop_snapshot(const char *path)
+{
+    return handle_cfgfile(path, Config_table, infide, CFG_SAVE);
+}
+
 static void save_options(const char *fname)
 {
 	hourglass_mouse();

@@ -28,3 +28,7 @@ extern short ovrstat;
 
 short voptions(void);
 void get_set_video(_WORD set);
+
+short me_voptions(void);
+const char *me_desktop_file(void);
+int me_desktop_snapshot(const char *path);

@@ -56,7 +56,7 @@ SRCS = \
 	environm.c environm.h \
 	startprg.c startprg.h \
 	floppy.c floppy.h \
-	video.c video.h \
+	video.c video.h mevideo.c mevideo_io.h \
 	file.c file.h \
 	\
 	dir.c dir.h \
